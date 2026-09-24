@@ -1,0 +1,7 @@
+faster-whisper>=1.1
+soundcard>=0.4.4
+numpy
+opencc-python-reimplemented
+# NVIDIA GPU 加速（沒有 NVIDIA 顯卡也可以裝，會自動改用 CPU）
+nvidia-cublas-cu12
+nvidia-cudnn-cu12>=9,<10
