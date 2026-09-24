@@ -23,6 +23,22 @@
 
 第一次轉錄時會自動下載語音模型（large-v3-turbo 約 1.6 GB）。有 NVIDIA 顯卡時會用 GPU 加速，沒有就用 CPU（會比較慢，建議改選 `small` 模型）。
 
+## 打包給其他電腦（免安裝 Python）
+
+```
+.venv\Scripts\python -m pip install pyinstaller
+.venv\Scripts\python build.py
+```
+
+會在 `dist/` 產生兩個壓縮檔，解壓後雙擊 `Corder.exe` 即可使用：
+
+| 檔案 | 大小 | 適合 |
+|---|---|---|
+| `Corder-一般版.zip` | 約 100 MB | 任何 Windows 電腦（CPU 轉錄，建議用 small 模型） |
+| `Corder-GPU版.zip` | 約 750 MB | 有 NVIDIA 顯卡的電腦（沒有顯卡也能用，會自動改用 CPU） |
+
+語音模型不包含在內，第一次轉錄時會自動下載。
+
 ## 小提示
 
 - 會議中英夾雜時，語言選「中文（含中英夾雜）」效果最好

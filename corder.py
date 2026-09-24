@@ -18,23 +18,41 @@ from tkinter import filedialog, messagebox, ttk
 
 import numpy as np
 
-APP_DIR = Path(__file__).resolve().parent
+FROZEN = getattr(sys, "frozen", False)  # 以 PyInstaller 打包的 exe 執行
+APP_DIR = Path(sys.executable).parent if FROZEN else Path(__file__).resolve().parent
 RECORD_DIR = APP_DIR / "recordings"
 SAMPLE_RATE = 16000
 BLOCK = SAMPLE_RATE // 2  # 每次讀取 0.5 秒
 
+# 視窗程式沒有主控台，下載模型時的進度列會因為 stderr 是 None 而當掉
+for _name in ("stdout", "stderr"):
+    if getattr(sys, _name) is None:
+        setattr(sys, _name, open(os.devnull, "w", encoding="utf-8"))
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+
 
 def _add_cuda_dll_dirs():
-    """讓 ctranslate2 找得到 pip 安裝的 cuBLAS / cuDNN。"""
-    base = Path(sys.prefix) / "Lib" / "site-packages" / "nvidia"
-    if not base.is_dir():
-        return
-    for bin_dir in base.glob("*/bin"):
-        os.add_dll_directory(str(bin_dir))
-        os.environ["PATH"] = str(bin_dir) + os.pathsep + os.environ["PATH"]
+    """讓 ctranslate2 找得到 cuBLAS / cuDNN：pip 安裝的 nvidia 套件，或 GPU 版 exe 旁的 cuda 資料夾。"""
+    dirs = list((Path(sys.prefix) / "Lib" / "site-packages" / "nvidia").glob("*/bin"))
+    dirs.append(APP_DIR / "cuda")
+    for bin_dir in dirs:
+        if bin_dir.is_dir():
+            os.add_dll_directory(str(bin_dir))
+            os.environ["PATH"] = str(bin_dir) + os.pathsep + os.environ["PATH"]
 
 
 _add_cuda_dll_dirs()
+
+
+def cuda_available():
+    try:
+        import ctypes
+        import ctranslate2
+
+        ctypes.WinDLL("cublas64_12.dll")  # 一般版 exe 沒附 CUDA 函式庫
+        return ctranslate2.get_cuda_device_count() > 0
+    except Exception:
+        return False
 
 MODELS = {
     "large-v3-turbo（推薦：快又準）": "large-v3-turbo",
@@ -76,11 +94,11 @@ class Engine:
 
         status(f"載入模型 {name}（第一次使用會自動下載，請稍候）…")
         try:
-            import ctranslate2
-
-            if ctranslate2.get_cuda_device_count() == 0:
+            if not cuda_available():
                 raise RuntimeError("no cuda")
             model = WhisperModel(name, device="cuda", compute_type="float16")
+            # 缺 cuBLAS / cuDNN 時要到真正運算才會出錯，先試跑一小段
+            list(model.transcribe(np.zeros(SAMPLE_RATE, dtype=np.float32), language="en")[0])
             device = "GPU"
         except Exception:
             model = WhisperModel(name, device="cpu", compute_type="int8")
@@ -243,7 +261,8 @@ class App:
         top = ttk.Frame(self.root, padding=(10, 10, 10, 4))
         top.pack(fill="x")
         ttk.Label(top, text="模型").pack(side="left")
-        self.model_var = tk.StringVar(value=next(iter(MODELS)))
+        # 沒有 NVIDIA 顯卡時預設用 small，CPU 也跟得上即時錄音
+        self.model_var = tk.StringVar(value=list(MODELS)[0 if cuda_available() else 3])
         ttk.Combobox(top, textvariable=self.model_var, values=list(MODELS), state="readonly", width=26).pack(
             side="left", padx=(4, 14)
         )
